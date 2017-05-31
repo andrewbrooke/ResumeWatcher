@@ -54,6 +54,5 @@ typings/
 # Yarn Integrity file
 .yarn-integrity
 
-# dotenv environment variables file
-.env
-
+client_secret.json
+resume.pdf
