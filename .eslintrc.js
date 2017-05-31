@@ -9,6 +9,7 @@ module.exports = {
         "indent": ["error", 4],
         "no-undef": "error",
         "no-use-before-define": "off",
-        "object-curly-spacing": ["error", "always"]
+        "object-curly-spacing": ["error", "always"],
+        "one-var": "off"
     }
 };

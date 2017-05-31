@@ -54,5 +54,6 @@ typings/
 # Yarn Integrity file
 .yarn-integrity
 
+.env
 client_secret.json
 resume.pdf

@@ -6,6 +6,9 @@ const fs = require('fs');
 const readline = require('readline');
 const google = require('googleapis');
 const GoogleAuth = require('google-auth-library');
+const git = require('nodegit');
+const mv = require('mv');
+const rimraf = require('rimraf');
 
 const drive = google.drive('v3');
 
@@ -17,6 +20,7 @@ const TOKEN_DIR = (process.env.HOME || process.env.HOMEPATH ||
 const TOKEN_PATH = TOKEN_DIR + 'drive-nodejs-resume-watcher.json';
 
 const DOCUMENT_ID = '1j187468he9kV68_rS7kUAUVD2tUEZjZeB2Brknj2QKg';
+const PDF_PATH = './Andrew Brooke - Resume.pdf';
 
 // Load client secrets from a local file.
 fs.readFile('client_secret.json', (err, content) => {
@@ -111,7 +115,7 @@ function watchDocument(auth) {
     drive.changes.getStartPageToken({
         auth: auth
     }, (err, res) => {
-        if (err) return debug(err);
+        if (err) return debug(`Error getting start page token: ${err}`);
 
         let fetchCallback = (err, res) => {
             debug(`Done fetching changes. Next page token: ${res}`);
@@ -139,10 +143,10 @@ function fetchChanges(auth, pageToken, pageFn, callback) {
     drive.changes.list({
         auth: auth,
         pageToken: pageToken
-    }, function(err, res) {
+    }, (err, res) => {
         if (err) return callback(err, null);
 
-        res.changes.forEach(function(change) {
+        res.changes.forEach((change) => {
             // A change to the resume was found
             if (change.fileId === DOCUMENT_ID) {
                 debug(`Change found for document ${DOCUMENT_ID}`);
@@ -166,14 +170,81 @@ function fetchChanges(auth, pageToken, pageFn, callback) {
  * @param {google.auth.OAuth2} auth An authorized OAuth2 client.
  */
 function downloadAsPDF(auth) {
-    const dest = fs.createWriteStream('./resume.pdf');
+    const dest = fs.createWriteStream(PDF_PATH);
     drive.files.export({
         auth: auth,
         fileId: DOCUMENT_ID,
         mimeType: 'application/pdf'
-    }).on('end', function() {
+    }).on('end', () => {
         debug('Download Complete');
-    }).on('error', function(err) {
+        commitChanges();
+    }).on('error', (err) => {
         debug('Error during download', err);
     }).pipe(dest);
+}
+
+/**
+ * Commits changed PDF to andrewbrooke.github.io repository on Github
+ */
+function commitChanges() {
+    let index, repo, oid, remote;
+    const hash = Math.random().toString(36).substring(7);
+    const dir = './tmp' + hash;
+
+    git.Clone('https://github.com/andrewbrooke/andrewbrooke.github.io', dir).then((repoResult) => { // eslint-disable-line
+        debug('Clone succeeded');
+        repo = repoResult;
+        mv(PDF_PATH, dir + '/' + PDF_PATH, (err) => {
+            if (err) return debug(`Error moving file: ${err}`);
+
+            return repo.refreshIndex().then((indexResult) => {
+                debug('Index refresh succeeded');
+                index = indexResult;
+                return index.addAll();
+            }).then(() => {
+                debug('Addall succeeded');
+                index.write();
+                return index.writeTree();
+            }).then((oidResult) => {
+                debug('Write succeeded');
+                oid = oidResult;
+                return git.Reference.nameToId(repo, 'HEAD');
+            }).then((head) => {
+                return repo.getCommit(head);
+            }).then((parent) => {
+                let author = git.Signature.now('ResumeWatcher',
+                    'andrewbrooke15@gmail.com');
+                let committer = git.Signature.now('ResumeWatcher',
+                    'andrewbrooke15@gmail.com');
+
+                return repo.createCommit('HEAD', author, committer,
+                    'Updated Resume ' + Date.now(), oid, [parent]);
+            }).then((commitId) => {
+                debug(`New Commit: ${commitId}`);
+                return repo.getRemote('origin');
+            }).then((remoteResult) => {
+                debug('Pushing to remote');
+                remote = remoteResult;
+
+                return remote.push(
+                    ['refs/heads/master:refs/heads/master'],
+                    {
+                        callbacks: {
+                            credentials: (url, userName) => {
+                                return git.Cred.userpassPlaintextNew(
+                                    process.env.GITHUB_USERNAME,
+                                    process.env.GITHUB_password);
+                            }
+                        }
+                    });
+            }).done(() => {
+                debug('Remote pushed');
+                rimraf(dir, () => {
+                    debug('Deleted .tmp');
+                });
+            });
+        });
+    }).catch((err) => {
+        debug(`Error in commitChanges: ${err}`);
+    });
 }
