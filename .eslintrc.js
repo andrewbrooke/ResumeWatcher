@@ -7,6 +7,7 @@ module.exports = {
     "rules": {
         "comma-dangle": "off",
         "indent": ["error", 4],
+        "max-len": ["error", 100],
         "no-undef": "error",
         "no-use-before-define": "off",
         "object-curly-spacing": ["error", "always"],

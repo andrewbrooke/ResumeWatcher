@@ -21,6 +21,7 @@ const TOKEN_PATH = TOKEN_DIR + 'drive-nodejs-resume-watcher.json';
 
 const DOCUMENT_ID = '1j187468he9kV68_rS7kUAUVD2tUEZjZeB2Brknj2QKg';
 const PDF_PATH = './Andrew Brooke - Resume.pdf';
+const POLLING_INTERVAL = 36000000;
 
 // Load client secrets from a local file.
 fs.readFile('client_secret.json', (err, content) => {
@@ -117,15 +118,18 @@ function watchDocument(auth) {
     }, (err, res) => {
         if (err) return debug(`Error getting start page token: ${err}`);
 
-        let fetchCallback = (err, res) => {
-            debug(`Done fetching changes. Next page token: ${res}`);
+        let startPageToken = res.startPageToken;
+
+        let fetchCallback = (err, newStartPageToken) => {
+            debug(`Done fetching changes. Next page token: ${newStartPageToken}`);
             setTimeout(() => {
-                fetchChanges(auth, res, fetchChanges, fetchCallback);
-            }, 5000);
+                fetchChanges(auth, newStartPageToken,
+                    fetchChanges, fetchCallback);
+            }, POLLING_INTERVAL);
         };
 
         // Start fetching changes
-        fetchChanges(auth, res.startPageToken, fetchChanges, fetchCallback);
+        fetchChanges(auth, startPageToken, fetchChanges, fetchCallback);
     });
 }
 
@@ -177,6 +181,7 @@ function downloadAsPDF(auth) {
         mimeType: 'application/pdf'
     }).on('end', () => {
         debug('Download Complete');
+        return;
         commitChanges();
     }).on('error', (err) => {
         debug('Error during download', err);
@@ -230,10 +235,10 @@ function commitChanges() {
                     ['refs/heads/master:refs/heads/master'],
                     {
                         callbacks: {
-                            credentials: (url, userName) => {
+                            credentials: (url, username) => {
                                 return git.Cred.userpassPlaintextNew(
                                     process.env.GITHUB_USERNAME,
-                                    process.env.GITHUB_password);
+                                    process.env.GITHUB_PASSWORD);
                             }
                         }
                     });

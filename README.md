@@ -13,7 +13,7 @@ Create `.env` at root directory like
 DEBUG=resume-watcher*
 NODE_ENV=development
 GITHUB_USERNAME=andrewbrooke
-GITHUB_password=x
+GITHUB_PASSWORD=x
 ```
 
 
